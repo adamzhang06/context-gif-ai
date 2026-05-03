@@ -14,7 +14,7 @@ The user's local collection of Reaction Media. Stored on-device; the product doe
 Flutter (Dart). Single codebase targeting Android, iOS, macOS, and Windows. Chosen for its first-class cross-platform support and native photo library / filesystem access on all target platforms. No backend server — the app calls AI APIs directly from the client using the user's own API key (BYOK).
 
 ### AI Provider
-Google Gemini Flash. Used for: pragmatic caption generation (vision, index time), screenshot analysis (vision, query time), and LLM reranking (text, query time). Gemini's embedding model (text-embedding-004) handles vector search. Single provider = single API key for BYOK. Chosen for free tier availability during validation; reassess if/when the product scales.
+Google Gemini Flash. Used for: pragmatic caption generation (vision, index time), screenshot analysis (vision, query time), and LLM reranking (text, query time). Gemini's embedding model (gemini-embedding-001) handles vector search. Single provider = single API key for BYOK. Chosen for free tier availability during validation; reassess if/when the product scales.
 
 ### Platform Rollout
 The planned platform sequence: macOS (internal dev/testing) → Android (first external user) → Windows → iOS → full cross-platform. Architecture must be cross-platform from day one even though the first build targets macOS.
