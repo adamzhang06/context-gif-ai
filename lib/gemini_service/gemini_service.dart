@@ -100,7 +100,10 @@ class GeminiService {
     final model = GenerativeModel(
       model: _captionModelName,
       apiKey: _apiKey,
-      generationConfig: GenerationConfig(responseMimeType: 'application/json'),
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+        maxOutputTokens: 8192,
+      ),
     );
     final GenerateContentResponse response;
     try {

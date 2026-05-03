@@ -1,12 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_key_store/api_key_screen.dart';
 import 'api_key_store/api_key_store.dart';
 import 'api_key_store/gemini_key_validator.dart';
-import 'gemini_service/gemini_service.dart';
-import 'indexing_pipeline/indexer.dart';
+import 'indexing_pipeline/indexing_pipeline.dart';
+import 'indexing_pipeline/indexing_progress.dart';
 import 'library_scanner/folder_selection_screen.dart';
-import 'library_scanner/library_scanner.dart';
 import 'reaction_index/reaction_index.dart';
 
 void main() {
@@ -102,79 +103,72 @@ class DevIndexingShell extends StatefulWidget {
 }
 
 class _DevIndexingShellState extends State<DevIndexingShell> {
-  ReactionIndex? _index;
-  Indexer? _indexer;
-  int _indexedCount = 0;
-  ReactionMediaRow? _lastResult;
-  String? _error;
-  bool _busy = false;
+  IndexingPipeline? _pipeline;
+  StreamSubscription<IndexingProgress>? _subscription;
+  IndexingProgress? _progress;
+  int _initialIndexedCount = 0;
+  String? _lastError;
 
   @override
   void initState() {
     super.initState();
-    _init();
+    _loadInitialCount();
   }
 
-  Future<void> _init() async {
+  Future<void> _loadInitialCount() async {
     final index = await ReactionIndex.open();
-    final gemini = GeminiService(widget.apiKey);
-    final indexer = Indexer(gemini: gemini, index: index);
     final count = await index.count();
-    setState(() {
-      _index = index;
-      _indexer = indexer;
-      _indexedCount = count;
-    });
+    await index.close();
+    if (!mounted) return;
+    setState(() => _initialIndexedCount = count);
   }
 
   @override
   void dispose() {
-    _index?.close();
+    _subscription?.cancel();
+    _pipeline?.stop();
     super.dispose();
   }
 
-  Future<void> _indexOne() async {
-    if (_index == null || _indexer == null) return;
+  void _startIndexing() {
+    final pipeline = IndexingPipeline();
     setState(() {
-      _busy = true;
-      _error = null;
+      _pipeline = pipeline;
+      _progress = null;
+      _lastError = null;
     });
-    try {
-      final scanner = LibraryScanner();
-      final files = await scanner.scan(widget.folders);
-      String? next;
-      for (final f in files) {
-        if (f.toLowerCase().endsWith('.mp4')) continue;
-        final existing = await _index!.findByPath(f);
-        if (existing == null) {
-          next = f;
-          break;
-        }
-      }
-      if (next == null) {
+    _subscription = pipeline
+        .start(apiKey: widget.apiKey, folderPaths: widget.folders)
+        .listen(
+      (progress) {
         setState(() {
-          _busy = false;
-          _error = 'All non-video items already indexed.';
+          _progress = progress;
+          if (progress.error != null) _lastError = progress.error;
         });
-        return;
-      }
-      final row = await _indexer!.indexFile(next);
-      final count = await _index!.count();
-      setState(() {
-        _lastResult = row;
-        _indexedCount = count;
-        _busy = false;
-      });
-    } catch (e) {
-      setState(() {
-        _busy = false;
-        _error = '$e';
-      });
-    }
+      },
+      onDone: () {
+        setState(() => _pipeline = null);
+      },
+      onError: (Object e) {
+        setState(() {
+          _pipeline = null;
+          _lastError = '$e';
+        });
+      },
+    );
+  }
+
+  Future<void> _stopIndexing() async {
+    await _pipeline?.stop();
   }
 
   @override
   Widget build(BuildContext context) {
+    final progress = _progress;
+    final running = _pipeline != null;
+    final completedThisRun = progress?.completed ?? 0;
+    final totalIndexed = _initialIndexedCount + completedThisRun;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Context GIF AI — dev'),
@@ -185,25 +179,33 @@ class _DevIndexingShellState extends State<DevIndexingShell> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$_indexedCount items indexed',
+            Text('$totalIndexed items indexed',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _busy ? null : _indexOne,
-              icon: _busy
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add),
-              label: const Text('Index one item'),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: running ? null : _startIndexing,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Start full indexing'),
+                ),
+                const SizedBox(width: 12),
+                if (running)
+                  OutlinedButton.icon(
+                    onPressed: _stopIndexing,
+                    icon: const Icon(Icons.stop),
+                    label: const Text('Stop'),
+                  ),
+              ],
             ),
             const SizedBox(height: 24),
-            if (_error != null)
-              Text(_error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            if (_lastResult != null) _LastResultCard(row: _lastResult!),
+            if (progress != null) _ProgressView(progress: progress),
+            if (_lastError != null) ...[
+              const SizedBox(height: 16),
+              Text('Last error: $_lastError',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.error)),
+            ],
           ],
         ),
       ),
@@ -211,33 +213,38 @@ class _DevIndexingShellState extends State<DevIndexingShell> {
   }
 }
 
-class _LastResultCard extends StatelessWidget {
-  const _LastResultCard({required this.row});
+class _ProgressView extends StatelessWidget {
+  const _ProgressView({required this.progress});
 
-  final ReactionMediaRow row;
+  final IndexingProgress progress;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(row.path,
-                style: Theme.of(context).textTheme.bodySmall,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 8),
-            Chip(label: Text('category: ${row.category}')),
-            const SizedBox(height: 12),
-            Text(row.caption),
-            const SizedBox(height: 12),
-            Text(
-              'embedding: ${row.embedding.length} dims',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+    final pct =
+        progress.total == 0 ? 0.0 : progress.processed / progress.total;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LinearProgressIndicator(value: progress.done ? 1.0 : pct),
+        const SizedBox(height: 12),
+        Text(
+          '${progress.processed} of ${progress.total} '
+          '(${progress.completed} indexed, ${progress.skipped} skipped, '
+          '${progress.failed} failed)',
         ),
-      ),
+        if (progress.currentItem != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            progress.currentItem!,
+            style: Theme.of(context).textTheme.bodySmall,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+        if (progress.done) ...[
+          const SizedBox(height: 12),
+          Text('Done.', style: Theme.of(context).textTheme.titleMedium),
+        ],
+      ],
     );
   }
 }
