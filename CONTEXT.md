@@ -3,7 +3,9 @@
 ## Glossary
 
 ### Reaction Media
-A locally-saved image or animation (`.gif`, `.jpg`, `.png`) used as a humorous or expressive response in a chat conversation. The core asset this product recommends. Do not call these "GIFs" (too narrow) or "memes" (implies specific format/origin).
+A locally-saved image, animation, or short video (`.gif`, `.jpg`, `.jpeg`, `.png`, `.webp`, `.mp4`) used as a humorous or expressive response in a chat conversation. The core asset this product recommends. Do not call these "GIFs" (too narrow) or "memes" (implies specific format/origin).
+
+`.mp4` files are treated as short reaction clips. They require video input for Gemini captioning (vs image input for stills), a thumbnail or looping preview in the recommendation UI, and platform-appropriate clipboard handling.
 
 ### Reaction Library
 The user's local collection of Reaction Media. Stored on-device; the product does not host or fetch media remotely.
