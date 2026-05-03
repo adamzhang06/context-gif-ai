@@ -8,14 +8,16 @@ void main() {
   late ApiKeyStore store;
 
   ProcessRunner fakeRunner(Map<String, String> keychain) {
-    return (executable, args) async {
+    return (executable, args, {String? stdinInput}) async {
       final sub = args.isNotEmpty ? args[0] : '';
       const account = 'gemini_api_key';
       const service = 'com.adamzhang.contextGifAi';
 
-      if (sub == 'add-generic-password') {
-        final wIdx = args.indexOf('-w');
-        final value = wIdx != -1 ? args[wIdx + 1] : '';
+      // security -i: save passes key via stdin to avoid argv exposure.
+      if (sub == '-i' && stdinInput != null) {
+        final parts = stdinInput.trim().split(' ');
+        final wIdx = parts.indexOf('-w');
+        final value = wIdx != -1 && wIdx + 1 < parts.length ? parts[wIdx + 1] : '';
         keychain['$account@$service'] = value;
         return ProcessResult(0, 0, '', '');
       }

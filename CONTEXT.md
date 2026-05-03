@@ -60,5 +60,5 @@ When Gemini is unreachable, the app degrades gracefully: LLM reranking is skippe
 ### Privacy
 - **Chat screenshots** — sent to Gemini API for analysis, then immediately discarded. Never persisted anywhere.
 - **Reaction Media captions and embeddings** — stored in a local on-device database only. Never uploaded.
-- **Gemini API key** — stored in the device's secure keystore (not plain-text app storage).
+- **Gemini API key** — stored in the device's secure keystore (not plain-text app storage). On macOS dev builds, this is implemented via the `security` CLI writing to the login Keychain. Production macOS (sandboxed/App Store) requires Xcode code signing to be configured before this guarantee holds — that is a known deferred item.
 - **User disclosure** — a plain-language notice on the API key setup screen informs users that chat screenshots are processed by Google's servers during analysis. Not buried in a privacy policy.
