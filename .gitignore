@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+node_modules/
+/data/
+/models/
+*.pt
+*.safetensors
+.ipynb_checkpoints/
+.DS_Store
